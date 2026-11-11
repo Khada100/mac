@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -34,6 +35,7 @@ public final class MacroController {
 
     private static final MacroController INSTANCE = new MacroController();
     private static final int MAX_LOG = 300;
+    private static final String LOG_TAG = "ImageMacro";
 
     public static MacroController get() {
         return INSTANCE;
@@ -241,6 +243,8 @@ public final class MacroController {
     // ------------------------------------------------------------------
 
     public void log(String message) {
+        // PC 에서 'adb logcat -s ImageMacro' 로도 볼 수 있게 시스템 로그에도 남김
+        Log.i(LOG_TAG, message);
         final String line;
         synchronized (logs) {
             line = timeFormat.format(new Date()) + " " + message;

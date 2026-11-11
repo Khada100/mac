@@ -33,10 +33,14 @@
 ### 방법 A — GitHub Actions로 자동 빌드된 APK 받기 (PC에 아무것도 설치 안 해도 됨)
 
 이 저장소에 코드를 올리면 GitHub가 APK를 자동으로 빌드합니다 (`.github/workflows/android.yml`).
+빌드된 APK는 매번 **최신 릴리스**에 올라가요.
 
-1. 저장소의 **Actions** 탭 → 가장 위의 초록색 ✅ 실행을 누릅니다.
-2. 맨 아래 **Artifacts**에서 `ImageMacro-debug-apk`를 내려받습니다. zip 파일이니 압축을 풀면 `app-debug.apk`가 나와요.
-3. APK를 폰으로 옮겨 설치합니다. '출처를 알 수 없는 앱' 설치를 허용해야 해요.
+- **폰에서 바로 받기**: 폰 브라우저로 아래 주소를 열면 APK가 내려받아집니다. 받은 파일을 눌러 설치하세요. '출처를 알 수 없는 앱' 설치를 허용해야 해요.
+  `https://github.com/Khada100/mac/releases/download/latest/ImageMacro.apk`
+- 또는 저장소의 **Actions** 탭 → 초록색 ✅ 실행 → 맨 아래 **Artifacts**에서 `ImageMacro-debug-apk`(zip)를 받을 수도 있어요.
+
+빌드할 때마다 에뮬레이터(Android 14) 자동 테스트도 함께 돌아갑니다.
+테스트 내용: 앱 실행 → 접근성 연결 → 화면 캡처 → 홈 화면 아이콘을 템플릿으로 등록 → 매크로가 그 아이콘을 찾아 실제로 터치하는지 확인.
 
 ### 방법 B — Android Studio에서 직접 빌드
 
