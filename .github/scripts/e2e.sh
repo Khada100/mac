@@ -7,7 +7,7 @@
 #     → 매크로가 A 를 발견하고 B 를 실제로 터치해서 B 앱이 열리는지 확인
 set -u
 PKG=com.imagemacro
-APK=apk/app-debug.apk
+APK=apk/app-x86_64-debug.apk
 OUT=e2e-out
 UI=".github/scripts/ui.py"
 mkdir -p "$OUT"

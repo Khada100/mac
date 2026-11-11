@@ -24,18 +24,21 @@ jobs:
       - name: Gradle 설정
         uses: gradle/actions/setup-gradle@v4
 
-      - name: 디버그 APK 빌드
+      - name: 매크로 엔진 단위 테스트
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew testDebugUnitTest --stacktrace
+
+      - name: 디버그 APK 빌드
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: APK 내용 확인
         run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          ls -l "$APK"
           AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
-          "$AAPT2" dump badging "$APK" | grep -E "^(package|sdkVersion|targetSdkVersion|uses-permission|application-label|native-code)"
-          unzip -l "$APK" | grep -E "lib/.*\.so|classes.*\.dex"
+          for APK in app/build/outputs/apk/debug/*.apk; do
+            echo "=== $APK ($(du -h "$APK" | cut -f1))"
+            "$AAPT2" dump badging "$APK" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)"
+          done
 
       - name: APK 업로드 (Actions 아티팩트)
         uses: actions/upload-artifact@v4
@@ -49,12 +52,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk ImageMacro.apk
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk ImageMacro.apk
+          cp app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk ImageMacro-armv7.apk
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest ImageMacro.apk \
+          gh release create latest ImageMacro.apk ImageMacro-armv7.apk \
             --target "$GITHUB_SHA" \
             --title "최신 APK (${GITHUB_REF_NAME} · ${GITHUB_SHA::7})" \
-            --notes "폰 브라우저에서 아래 ImageMacro.apk 를 눌러 내려받고 설치하세요. 설치 후 사용법은 README 참고."
+            --notes "폰 브라우저에서 ImageMacro.apk 를 눌러 내려받고 설치하세요 (요즘 폰 대부분). 설치가 안 되는 아주 오래된 폰(32비트)은 ImageMacro-armv7.apk. 사용법은 README 참고."
 
   emulator-test:
     needs: build

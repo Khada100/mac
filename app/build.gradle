@@ -27,6 +27,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // 폰용(arm64 / 구형 armv7)과 에뮬레이터용(x86_64) APK 를 따로 만들어 용량을 줄임
+    splits {
+        abi {
+            enable = true
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            universalApk = false
+        }
+    }
+
     lint {
         // 개인용 앱: 스토어 배포 규칙(targetSdk 등) 때문에 릴리스 빌드가 막히지 않도록
         abortOnError = false
@@ -37,4 +47,7 @@ android {
 dependencies {
     // 이미지 인식 (윈도우판 cv2 와 같은 OpenCV) - Maven Central 공식 배포본
     implementation 'org.opencv:opencv:4.10.0'
+
+    // 매크로 엔진 단위 테스트 (PC 에서 실행)
+    testImplementation 'junit:junit:4.13.2'
 }

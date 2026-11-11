@@ -35,6 +35,16 @@ public final class OpenCvVision implements Vision {
     private final Mat result = new Mat();
     private boolean hasScreen = false;
 
+    // 화면 변화 감지용 (화면을 작게 줄인 '지문')
+    private static final int GRID_COLS = 16;
+    private static final int GRID_ROWS = 9;
+    private final Mat signature = new Mat();
+    private final Mat prevSignature = new Mat();
+    private final Mat markSignature = new Mat();
+    private final Mat diffMat = new Mat();
+    private final Mat gridMat = new Mat();
+    private double lastFrameDiff = 255;
+
     /**
      * @param processScale 처리 해상도 비율 (1.0 = 원본). 0.5 로 하면 4배 가까이 빨라지지만 작은 글자 인식이 약해진다.
      * @param scales       템플릿 배율 목록 (윈도우판 기본값 0.95, 1.0, 1.05)
@@ -112,7 +122,44 @@ public final class OpenCvVision implements Vision {
             Imgproc.resize(fullGray, smallGray, new Size(), processScale, processScale, Imgproc.INTER_AREA);
         }
         hasScreen = true;
+        updateSignature();
         return true;
+    }
+
+    /** 1/8 크기로 줄인 화면을 지문으로 저장하고, 직전 지문과의 차이를 계산 */
+    private void updateSignature() {
+        double w = Math.max(GRID_COLS, fullGray.cols() / 8);
+        double h = Math.max(GRID_ROWS, fullGray.rows() / 8);
+        Imgproc.resize(fullGray, signature, new Size(w, h), 0, 0, Imgproc.INTER_AREA);
+        lastFrameDiff = gridDiff(signature, prevSignature);
+        signature.copyTo(prevSignature);
+    }
+
+    /** 두 지문을 16x9 칸으로 나눠 칸별 평균 차이 중 최댓값 (일부 글자만 바뀌어도 잡히게) */
+    private double gridDiff(Mat a, Mat b) {
+        if (a.empty() || b.empty() || a.rows() != b.rows() || a.cols() != b.cols()) {
+            return 255;
+        }
+        Core.absdiff(a, b, diffMat);
+        Imgproc.resize(diffMat, gridMat, new Size(GRID_COLS, GRID_ROWS), 0, 0, Imgproc.INTER_AREA);
+        return Core.minMaxLoc(gridMat).maxVal;
+    }
+
+    @Override
+    public void markScreen() {
+        if (!signature.empty()) {
+            signature.copyTo(markSignature);
+        }
+    }
+
+    @Override
+    public double diffFromMark() {
+        return gridDiff(signature, markSignature);
+    }
+
+    @Override
+    public double lastFrameDiff() {
+        return lastFrameDiff;
     }
 
     @Override
@@ -162,5 +209,10 @@ public final class OpenCvVision implements Vision {
         smallGray.release();
         resized.release();
         result.release();
+        signature.release();
+        prevSignature.release();
+        markSignature.release();
+        diffMat.release();
+        gridMat.release();
     }
 }

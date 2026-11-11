@@ -51,7 +51,20 @@ public final class MacroEngine implements Runnable {
         public int clickDelayMs = 500;
         /** collect 버튼을 기다리는 최대 시간(초). 0 이하면 윈도우판처럼 무한 대기. */
         public int buttonTimeoutSeconds = 120;
+        /**
+         * 터치 후 화면이 바뀌고 멈출 때까지 기다리는 최대 시간(ms).
+         * 화면 전환 중에 다시 검사해서 새로고침을 두 번 누르거나 엉뚱한 곳을 누르는 것을 막는다.
+         * 0 이면 윈도우판처럼 clickDelayMs 만큼만 기다린다.
+         */
+        public int settleMaxMs = 1500;
     }
+
+    /** 터치 후 이만큼 바뀌면 '화면이 바뀌었다'고 본다 (칸별 평균 밝기 차이). */
+    private static final double CHANGE_DIFF = 8.0;
+    /** 연속 두 화면 차이가 이보다 작으면 '멈췄다'고 본다. */
+    private static final double STABLE_DIFF = 3.0;
+    /** 터치 후 화면 변화를 기다리는 최대 시간. */
+    private static final long CHANGE_TIMEOUT_MS = 3000;
 
     /** 터치 실패 (접근성 서비스 꺼짐 등) - 계속해도 의미가 없으므로 엔진을 멈춘다. */
     private static final class TapFailedException extends RuntimeException {
@@ -182,7 +195,7 @@ public final class MacroEngine implements Runnable {
                 tap(reload, "RELOAD");
                 reloadCount++;
                 status("새로고침 " + reloadCount + "회");
-                sleep(config.clickDelayMs);
+                waitAfterTap("RELOAD");
             } else {
                 log("[RELOAD 못 찾음] 재검색 진행");
             }
@@ -234,7 +247,7 @@ public final class MacroEngine implements Runnable {
                 Match m = vision.find(templateId, config.buttonThreshold);
                 if (m != null) {
                     tap(m, label);
-                    sleep(config.clickDelayMs);
+                    waitAfterTap(label);
                     return true;
                 }
             }
@@ -249,6 +262,7 @@ public final class MacroEngine implements Runnable {
     }
 
     private void tap(Match m, String label) throws InterruptedException {
+        vision.markScreen(); // 터치 직전 화면 기억 (터치 후 바뀌었는지 비교용)
         boolean ok = tapper.tap(m.x, m.y);
         if (!running) {
             throw new InterruptedException();
@@ -257,6 +271,48 @@ public final class MacroEngine implements Runnable {
             throw new TapFailedException("터치 실패: 접근성 서비스가 꺼져 있거나 응답하지 않습니다.");
         }
         log(String.format(Locale.US, "[%s 클릭] 위치=(%d, %d) 신뢰도=%.2f", label, m.x, m.y, m.confidence));
+    }
+
+    /**
+     * 터치 후 대기: clickDelayMs 만큼 기다린 뒤, 화면이 실제로 바뀌고(최대 3초) 멈출 때까지(최대 settleMaxMs) 기다린다.
+     * 화면 전환 도중의 화면을 다시 검사해서 같은 버튼을 두 번 누르거나 엉뚱한 곳을 누르는 것을 막는다.
+     */
+    private void waitAfterTap(String label) throws InterruptedException {
+        sleep(config.clickDelayMs);
+        if (config.settleMaxMs <= 0) {
+            return;
+        }
+        long changeDeadline = System.currentTimeMillis() + CHANGE_TIMEOUT_MS;
+        boolean changed = false;
+        while (running) {
+            if (vision.capture() && vision.diffFromMark() >= CHANGE_DIFF) {
+                changed = true;
+                break;
+            }
+            if (System.currentTimeMillis() > changeDeadline) {
+                break;
+            }
+            sleep(100);
+        }
+        if (!running) {
+            return;
+        }
+        if (!changed) {
+            log("[" + label + "] 터치 후 화면 변화가 없어요. 다음 검사로 넘어갑니다.");
+            return;
+        }
+        long settleDeadline = System.currentTimeMillis() + config.settleMaxMs;
+        int stableCount = 0;
+        while (running && System.currentTimeMillis() < settleDeadline) {
+            sleep(150);
+            if (vision.capture() && vision.lastFrameDiff() < STABLE_DIFF) {
+                if (++stableCount >= 2) {
+                    return;
+                }
+            } else {
+                stableCount = 0;
+            }
+        }
     }
 
     private void sleep(long ms) throws InterruptedException {

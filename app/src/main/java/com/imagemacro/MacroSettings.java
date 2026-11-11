@@ -20,6 +20,8 @@ public final class MacroSettings {
     public int clickDelayMs = 500;
     /** collect 버튼 최대 대기(초). 0 = 무한 대기 (윈도우판 동작). */
     public int buttonTimeoutSeconds = 120;
+    /** 터치 후 화면이 바뀌고 멈출 때까지 기다리는 최대 시간(ms). 0 = 윈도우판처럼 고정 대기만. */
+    public int settleMaxMs = 1500;
     public String scales = "0.95,1.0,1.05";
     /** 처리 해상도 비율. 1.0 = 원본. */
     public double processScale = 1.0;
@@ -33,6 +35,7 @@ public final class MacroSettings {
         s.intervalMs = parseInt(p.getString("intervalMs", null), s.intervalMs);
         s.clickDelayMs = parseInt(p.getString("clickDelayMs", null), s.clickDelayMs);
         s.buttonTimeoutSeconds = parseInt(p.getString("buttonTimeoutSeconds", null), s.buttonTimeoutSeconds);
+        s.settleMaxMs = parseInt(p.getString("settleMaxMs", null), s.settleMaxMs);
         s.scales = p.getString("scales", s.scales);
         s.processScale = parseDouble(p.getString("processScale", null), s.processScale);
         s.sanitize();
@@ -48,6 +51,7 @@ public final class MacroSettings {
                 .putString("intervalMs", String.valueOf(intervalMs))
                 .putString("clickDelayMs", String.valueOf(clickDelayMs))
                 .putString("buttonTimeoutSeconds", String.valueOf(buttonTimeoutSeconds))
+                .putString("settleMaxMs", String.valueOf(settleMaxMs))
                 .putString("scales", scales)
                 .putString("processScale", String.valueOf(processScale))
                 .apply();
@@ -61,6 +65,7 @@ public final class MacroSettings {
         intervalMs = (int) clamp(intervalMs, 0, 60000);
         clickDelayMs = (int) clamp(clickDelayMs, 0, 60000);
         buttonTimeoutSeconds = (int) clamp(buttonTimeoutSeconds, 0, 3600);
+        settleMaxMs = (int) clamp(settleMaxMs, 0, 10000);
         processScale = clamp(processScale, 0.25, 1.0);
         if (scales == null || scales.trim().isEmpty()) {
             scales = "0.95,1.0,1.05";
@@ -97,6 +102,7 @@ public final class MacroSettings {
         c.intervalMs = intervalMs;
         c.clickDelayMs = clickDelayMs;
         c.buttonTimeoutSeconds = buttonTimeoutSeconds;
+        c.settleMaxMs = settleMaxMs;
         return c;
     }
 

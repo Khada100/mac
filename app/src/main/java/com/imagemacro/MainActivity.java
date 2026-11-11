@@ -55,6 +55,7 @@ public class MainActivity extends Activity implements MacroController.Listener {
     private EditText editInterval;
     private EditText editClickDelay;
     private EditText editTimeout;
+    private EditText editSettle;
     private EditText editScales;
     private EditText editProcessScale;
 
@@ -368,6 +369,8 @@ public class MainActivity extends Activity implements MacroController.Listener {
         editClickDelay = addSetting("클릭 후 대기 (ms) · 새로고침이 두 번씩 눌리면 늘리기",
                 String.valueOf(s.clickDelayMs), integer);
         editTimeout = addSetting("확인 버튼 최대 대기 (초, 0 = 무한 대기)", String.valueOf(s.buttonTimeoutSeconds), integer);
+        editSettle = addSetting("터치 후 화면 안정 대기 최대 (ms, 0 = 끄기) · 화면이 바뀌고 멈춘 뒤 다음 검사",
+                String.valueOf(s.settleMaxMs), integer);
         editScales = addSetting("검색 배율 (쉼표로 구분)", s.scales, InputType.TYPE_CLASS_TEXT);
         editProcessScale = addSetting("처리 해상도 비율 (1.0 = 원본 · 0.5 = 빠르지만 작은 글자 인식 약함)",
                 String.valueOf(s.processScale), decimal);
@@ -394,6 +397,7 @@ public class MainActivity extends Activity implements MacroController.Listener {
         s.intervalMs = MacroSettings.parseInt(editInterval.getText().toString(), s.intervalMs);
         s.clickDelayMs = MacroSettings.parseInt(editClickDelay.getText().toString(), s.clickDelayMs);
         s.buttonTimeoutSeconds = MacroSettings.parseInt(editTimeout.getText().toString(), s.buttonTimeoutSeconds);
+        s.settleMaxMs = MacroSettings.parseInt(editSettle.getText().toString(), s.settleMaxMs);
         s.scales = editScales.getText().toString().trim();
         s.processScale = MacroSettings.parseDouble(editProcessScale.getText().toString(), s.processScale);
         s.save(this);
