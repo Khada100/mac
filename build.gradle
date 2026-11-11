@@ -1,0 +1,4 @@
+// 최상위 빌드 파일
+plugins {
+    id 'com.android.application' version '8.7.3' apply false
+}

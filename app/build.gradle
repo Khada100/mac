@@ -1,0 +1,40 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace = 'com.imagemacro'
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = 'com.imagemacro'
+        minSdk = 26          // Android 8.0 이상
+        targetSdk = 34
+        versionCode = 1
+        versionName = '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            // 별도 서명 키 없이도 설치할 수 있도록 디버그 키로 서명 (개인용)
+            signingConfig = signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        // 개인용 앱: 스토어 배포 규칙(targetSdk 등) 때문에 릴리스 빌드가 막히지 않도록
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+}
+
+dependencies {
+    // 이미지 인식 (윈도우판 cv2 와 같은 OpenCV) - Maven Central 공식 배포본
+    implementation 'org.opencv:opencv:4.10.0'
+}

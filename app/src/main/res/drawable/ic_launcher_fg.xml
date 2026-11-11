@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱 아이콘 전경: 손가락 터치 표시 + 돋보기 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 화면 사각형 -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4"
+        android:pathData="M32,34h44v40h-44z" />
+    <!-- 돋보기 -->
+    <path
+        android:fillColor="#FFFFD600"
+        android:pathData="M60,58m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
+    <path
+        android:fillColor="#FF1E3A5F"
+        android:pathData="M60,58m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path
+        android:strokeColor="#FFFFD600"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M66.5,64.5L74,72" />
+    <!-- 터치 점 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M42,46m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>

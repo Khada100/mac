@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:alpha="0.92"
+    android:background="@drawable/overlay_bg"
+    android:orientation="vertical"
+    android:padding="4dp">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/overlayHandle"
+            style="@style/OverlayButton"
+            android:background="@drawable/overlay_btn_handle"
+            android:text="✥" />
+
+        <TextView
+            android:id="@+id/overlayToggle"
+            style="@style/OverlayButton"
+            android:background="@drawable/overlay_btn_start"
+            android:text="▶ 시작" />
+
+        <TextView
+            android:id="@+id/overlayCapture"
+            style="@style/OverlayButton"
+            android:text="📷 등록" />
+
+        <TextView
+            android:id="@+id/overlayApp"
+            style="@style/OverlayButton"
+            android:text="⚙" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/overlayStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxWidth="280dp"
+        android:maxLines="1"
+        android:paddingStart="4dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="4dp"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/overlayLog"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxWidth="280dp"
+        android:maxLines="2"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="2dp"
+        android:textColor="#FFBDBDBD"
+        android:textSize="10sp" />
+</LinearLayout>

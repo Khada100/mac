@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">이미지 매크로</string>
+    <string name="accessibility_label">이미지 매크로 (자동 터치)</string>
+    <string name="accessibility_desc">등록한 이미지를 게임 화면에서 찾아 자동으로 터치하고, 게임 위에 조작 버튼을 띄우는 데 사용합니다. 화면 내용을 외부로 보내지 않습니다.</string>
+    <string name="hint_run">화면 캡처를 시작한 뒤 게임으로 이동하면 게임 위에 작은 조작 버튼이 떠요. ▶ 시작 / ■ 정지, 📷 등록(현재 화면을 찍어서 잘라 저장), ⚙ 이 앱 열기. ✥ 손잡이를 끌면 위치를 옮길 수 있어요. 조작 버튼이 게임 버튼을 가리지 않게 구석으로 옮겨 두세요.</string>
+    <string name="hint_register">게임 화면에서 📷 등록을 누르면 현재 화면이 열려요. 한 손가락으로 영역을 끌어 선택하고(두 손가락으로 확대), 위쪽에서 종류를 고른 뒤 저장하세요. 한 화면에서 여러 개를 연달아 저장할 수 있어요. 글자 옵션은 다른 옵션과 겹치지 않는 부분(예: 빙결 시간 → 빙결)만 자르면 오인식이 줄어요.</string>
+</resources>

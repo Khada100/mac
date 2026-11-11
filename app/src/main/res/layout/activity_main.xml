@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 1. 권한 -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="1. 권한" />
+
+        <TextView
+            android:id="@+id/textAccess"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="4dp" />
+
+        <Button
+            android:id="@+id/btnAccess"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="접근성 서비스 켜기" />
+
+        <Button
+            android:id="@+id/btnNotify"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="알림 권한 허용 (캡처 중 알림 표시용)" />
+
+        <!-- 2. 실행 -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="2. 화면 캡처 / 실행" />
+
+        <TextView
+            android:id="@+id/textCapture"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/textStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnCapture"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="화면 캡처 시작" />
+
+            <Button
+                android:id="@+id/btnMacro"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="매크로 시작" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/Hint"
+            android:text="@string/hint_run" />
+
+        <!-- 3. 이미지 등록 -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="3. 이미지 등록" />
+
+        <TextView
+            style="@style/Hint"
+            android:text="@string/hint_register" />
+
+        <Button
+            android:id="@+id/btnImport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="갤러리(스크린샷)에서 가져와 자르기" />
+
+        <TextView
+            style="@style/SubTitle"
+            android:text="버튼 이미지 (4개 모두 필요)" />
+
+        <LinearLayout
+            android:id="@+id/listButtons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            style="@style/SubTitle"
+            android:text="회피할 옵션 이미지 — 하나라도 보이면 새로고침" />
+
+        <LinearLayout
+            android:id="@+id/listOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <!-- 4. 설정 -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="4. 설정" />
+
+        <LinearLayout
+            android:id="@+id/settingsBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <Button
+            android:id="@+id/btnSaveSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="설정 저장" />
+
+        <!-- 5. 로그 -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="5. 실행 로그 (최신이 위)" />
+
+        <TextView
+            android:id="@+id/textLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FF1E1E1E"
+            android:padding="8dp"
+            android:textColor="#FFE0E0E0"
+            android:textIsSelectable="true"
+            android:textSize="11sp"
+            android:typeface="monospace" />
+    </LinearLayout>
+</ScrollView>
