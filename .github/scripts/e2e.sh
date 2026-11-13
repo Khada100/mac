@@ -26,12 +26,31 @@ wait_log() { # 패턴, 최대 초
   done
   return 1
 }
-tap_text() {
+dismiss_dialogs() { # 에뮬레이터가 느려서 뜨는 'xxx isn't responding' 같은 시스템 창 닫기
   dump
-  local xy
-  xy=$(python3 "$UI" find "$OUT/ui.xml" "$1" "$2") || return 1
-  echo "tap '$2' at $xy"
-  adb shell input tap $xy
+  if grep -qE "isn.t responding|keeps stopping|has stopped" "$OUT/ui.xml"; then
+    local xy
+    xy=$(python3 "$UI" find "$OUT/ui.xml" text "Wait") || xy=$(python3 "$UI" find "$OUT/ui.xml" text "Close app") || xy=""
+    if [ -n "$xy" ]; then
+      echo "(시스템 응답 없음 창 닫기 at $xy)"
+      adb shell input tap $xy
+      sleep 2
+      dump
+    fi
+  fi
+}
+tap_text() {
+  local xy attempt
+  for attempt in 1 2 3; do
+    dismiss_dialogs
+    if xy=$(python3 "$UI" find "$OUT/ui.xml" "$1" "$2"); then
+      echo "tap '$2' at $xy"
+      adb shell input tap $xy
+      return 0
+    fi
+    sleep 3
+  done
+  return 1
 }
 snap_compare() { # 이름 : 앱이 캡처해서 보고 있는 화면 vs 실제 화면(screencap) 비교
   adb shell run-as "$PKG" rm -f files/debug_frame.png
@@ -60,6 +79,10 @@ push_file() { # 로컬파일, 앱 내부 경로
 
 adb logcat -c
 
+# 느린 에뮬레이터에서 '앱 응답 없음' 창이 화면을 가리지 않게
+adb shell settings put global hide_error_dialogs 1 || true
+sleep 5
+
 step "1. 설치 / 실행"
 adb install -r -g "$APK" || { fail "설치 실패"; exit 1; }
 adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.MacroAccessibilityService"
@@ -78,12 +101,7 @@ sleep 2
 tap_text text "화면 캡처 시작" || fail "'화면 캡처 시작' 버튼 없음"
 sleep 3
 shot 2_consent
-dump
-if python3 "$UI" find "$OUT/ui.xml" resource-id "android:id/button1" > /dev/null; then
-  tap_text resource-id "android:id/button1"
-else
-  fail "화면 캡처 권한 창 버튼을 못 찾음"
-fi
+tap_text resource-id "android:id/button1" || fail "화면 캡처 권한 창 버튼을 못 찾음"
 if wait_log "화면 캡처] 시작" 10; then pass "화면 캡처 시작"; else fail "화면 캡처 시작 안 됨"; fi
 sleep 2
 shot 3_after_capture
