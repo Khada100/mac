@@ -34,10 +34,11 @@ jobs:
 
       - name: APK 내용 확인
         run: |
-          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
           for APK in app/build/outputs/apk/debug/*.apk; do
             echo "=== $APK ($(du -h "$APK" | cut -f1))"
-            "$AAPT2" dump badging "$APK" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)"
+            "${BT}aapt2" dump badging "$APK" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)"
+            "${BT}apksigner" verify --print-certs "$APK" | grep -i "SHA-256"
           done
 
       - name: APK 업로드 (Actions 아티팩트)
