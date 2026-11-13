@@ -85,6 +85,11 @@ public final class MacroEngine implements Runnable {
     private int reloadCount = 0;
     private int cycleCount = 0;
 
+    // 진단 로그: 시작 후 30초 동안은 5초마다, 그 뒤로는 1분마다
+    private long startedMs = 0;
+    private long lastDiagMs = 0;
+    private long noFrameSinceMs = 0;
+
     public MacroEngine(Vision vision, Tapper tapper, Listener listener,
                        List<String> optionIds, List<String> optionNames, Config config) {
         if (optionIds.size() != optionNames.size()) {
@@ -141,6 +146,7 @@ public final class MacroEngine implements Runnable {
     }
 
     private void loop() throws InterruptedException {
+        startedMs = System.currentTimeMillis();
         log(String.format(Locale.US,
                 "[설정 완료] 감시 템플릿 %d개 (%s) | 옵션 임계값 %.2f, 버튼 임계값 %.2f",
                 optionNames.size(), join(optionNames), config.optionThreshold, config.buttonThreshold));
@@ -168,13 +174,23 @@ public final class MacroEngine implements Runnable {
     private void step() throws InterruptedException {
         // 1. 화면 캡처
         if (!vision.capture()) {
-            status("화면을 기다리는 중...");
+            long now = System.currentTimeMillis();
+            if (noFrameSinceMs == 0) {
+                noFrameSinceMs = now;
+            }
+            long waited = (now - noFrameSinceMs) / 1000;
+            status("화면을 기다리는 중... " + waited + "초");
+            if (now - noFrameSinceMs >= 3000 && diagDue(now)) {
+                log("[경고] 화면을 " + waited + "초째 받지 못하고 있어요 | " + vision.describeSource());
+            }
             sleep(500);
             return;
         }
+        noFrameSinceMs = 0;
 
         // 2. 회피 옵션 템플릿 검색
         status("옵션 검사 중");
+        long scanStart = System.currentTimeMillis();
         List<String> found = new ArrayList<>();
         for (int i = 0; i < optionIds.size() && running; i++) {
             Match m = vision.find(optionIds.get(i), config.optionThreshold);
@@ -185,6 +201,10 @@ public final class MacroEngine implements Runnable {
         }
         if (!running) {
             return;
+        }
+        long scanMs = System.currentTimeMillis() - scanStart;
+        if (diagDue(System.currentTimeMillis())) {
+            logDiagnostics(scanMs);
         }
 
         // 3. 템플릿 발견 -> reload 클릭 -> 재검색
@@ -253,12 +273,54 @@ public final class MacroEngine implements Runnable {
             }
             if (System.currentTimeMillis() > deadline) {
                 log("[" + label + " 시간 초과] " + config.buttonTimeoutSeconds
-                        + "초 동안 못 찾아서 처음 단계(옵션 검사)로 돌아갑니다.");
+                        + "초 동안 못 찾아서 처음 단계(옵션 검사)로 돌아갑니다. (현재 화면 최고 신뢰도 "
+                        + score(templateId) + ", 기준 " + String.format(Locale.US, "%.2f", config.buttonThreshold) + ")");
                 return false;
             }
             sleep(100);
         }
         return false;
+    }
+
+    /** 진단 로그를 남길 때인지 (처음 30초는 5초마다, 그 뒤 1분마다) */
+    private boolean diagDue(long now) {
+        long interval = now - startedMs < 30_000 ? 5_000 : 60_000;
+        if (lastDiagMs != 0 && now - lastDiagMs < interval) {
+            return false;
+        }
+        lastDiagMs = now;
+        return true;
+    }
+
+    /** 현재 화면 상태 + 템플릿별 최고 신뢰도(임계값과 무관)를 로그로 남김 */
+    private void logDiagnostics(long scanMs) {
+        StringBuilder sb = new StringBuilder("[진단] ");
+        sb.append(vision.describeScreen());
+        sb.append(String.format(Locale.US, " · 옵션 검사 %.1f초", scanMs / 1000.0));
+        sb.append(" | 최고 신뢰도: ");
+        for (int i = 0; i < optionIds.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(optionNames.get(i)).append(' ').append(score(optionIds.get(i)));
+        }
+        sb.append(" | 시작 ").append(score(START)).append(", 새로고침 ").append(score(RELOAD));
+        String src = vision.describeSource();
+        if (!src.isEmpty()) {
+            sb.append(" | ").append(src);
+        }
+        log(sb.toString());
+        double sd = vision.screenStdDev();
+        if (sd >= 0 && sd < 3) {
+            log("[경고] 캡처된 화면이 거의 한 가지 색이에요 (검은 화면?). 게임이 화면 캡처를 막거나 화면이 꺼져 있을 수 있어요."
+                    + " 📷 등록을 눌러 화면이 제대로 찍히는지 확인해 보세요.");
+        }
+    }
+
+    /** 임계값과 상관없이 가장 비슷한 곳의 신뢰도 */
+    private String score(String templateId) {
+        Match m = vision.find(templateId, -1);
+        return m == null ? "-" : String.format(Locale.US, "%.2f", m.confidence);
     }
 
     private void tap(Match m, String label) throws InterruptedException {

@@ -44,6 +44,8 @@ public final class OpenCvVision implements Vision {
     private final Mat diffMat = new Mat();
     private final Mat gridMat = new Mat();
     private double lastFrameDiff = 255;
+    private double lastMean = -1;
+    private double lastStd = -1;
 
     /**
      * @param processScale 처리 해상도 비율 (1.0 = 원본). 0.5 로 하면 4배 가까이 빨라지지만 작은 글자 인식이 약해진다.
@@ -123,7 +125,44 @@ public final class OpenCvVision implements Vision {
         }
         hasScreen = true;
         updateSignature();
+        lastMean = -1; // 밝기 통계는 진단할 때만 계산
         return true;
+    }
+
+    private void computeBrightness() {
+        if (lastMean >= 0 || fullGray.empty()) {
+            return;
+        }
+        MatOfDouble mean = new MatOfDouble();
+        MatOfDouble std = new MatOfDouble();
+        Core.meanStdDev(signature.empty() ? fullGray : signature, mean, std);
+        lastMean = mean.toArray()[0];
+        lastStd = std.toArray()[0];
+        mean.release();
+        std.release();
+    }
+
+    @Override
+    public String describeScreen() {
+        if (!hasScreen) {
+            return "화면 없음";
+        }
+        computeBrightness();
+        return String.format(java.util.Locale.US, "%d×%d 밝기 %.0f±%.0f", fullGray.cols(), fullGray.rows(), lastMean, lastStd);
+    }
+
+    @Override
+    public double screenStdDev() {
+        if (!hasScreen) {
+            return -1;
+        }
+        computeBrightness();
+        return lastStd;
+    }
+
+    @Override
+    public String describeSource() {
+        return source.debugInfo();
     }
 
     /** 1/8 크기로 줄인 화면을 지문으로 저장하고, 직전 지문과의 차이를 계산 */

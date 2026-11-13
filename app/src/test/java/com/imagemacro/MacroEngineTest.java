@@ -166,6 +166,28 @@ public class MacroEngineTest {
         t = new Thread(e); t.start(); Thread.sleep(4000); e.stop(); t.join(3000);
         check(g.doubleTaps > 0, "안정 대기 끄면 중복 터치 발생: " + g.doubleTaps + "회 (버그 재현)");
 
+        System.out.println("Test 8: 시작 직후 진단 로그 (화면 정보 + 템플릿별 최고 신뢰도)");
+        g = new Game(100000); l = new L(); g.mods.clear(); g.mods.add("기절");
+        e = new MacroEngine(g, g, l, ids(), names(), cfg(40, 0));
+        t = new Thread(e); t.start(); Thread.sleep(600); e.stop(); t.join(3000);
+        boolean diag = false;
+        for (String s : new ArrayList<>(l.logs)) if (s.startsWith("[진단]") && s.contains("최고 신뢰도") && s.contains("시작 0.99")) diag = true;
+        check(diag, "진단 로그에 템플릿별 최고 신뢰도 표시");
+
+        System.out.println("Test 9: 화면이 안 들어오면 3초 뒤 경고 로그 (조용히 멈춰 있지 않음)");
+        Vision noFrames = new Vision() {
+            public boolean capture() { return false; }
+            public Match find(String id, double th) { return null; }
+            public String describeSource() { return "수신 0장"; }
+        };
+        l = new L();
+        e = new MacroEngine(noFrames, (x, y) -> true, l, ids(), names(), cfg(1, 1));
+        t = new Thread(e); t.start(); Thread.sleep(4300); e.stop(); t.join(3000);
+        boolean warnNoFrame = false;
+        for (String s : new ArrayList<>(l.logs)) if (s.contains("받지 못하고") && s.contains("수신 0장")) warnNoFrame = true;
+        check(warnNoFrame, "화면 미수신 경고 + 캡처 상태 표시");
+        check(l.status.startsWith("정지") || l.status.contains("화면을 기다리는 중"), "상태 표시: " + l.status);
+
         System.out.println(fails == 0 ? "\nALL PASS" : "\nFAILURES: " + fails);
         assertEquals("실패한 검사 수", 0, fails);
     }

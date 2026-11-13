@@ -34,6 +34,17 @@
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
             android:windowSoftInputMode="adjustPan" />
 
+        <!-- 자동 테스트용: adb 셸(DUMP 권한)에서만 매크로 시작/정지 가능 -->
+        <receiver
+            android:name=".DebugCommandReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.imagemacro.action.DEBUG_START" />
+                <action android:name="com.imagemacro.action.DEBUG_STOP" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".ScreenCaptureService"
             android:exported="false"

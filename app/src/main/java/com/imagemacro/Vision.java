@@ -34,4 +34,19 @@ public interface Vision {
     default double lastFrameDiff() {
         return 0;
     }
+
+    /** 진단용: 마지막 화면 정보 (예: "2340×1080 밝기 87±42") */
+    default String describeScreen() {
+        return "";
+    }
+
+    /** 진단용: 마지막 화면 밝기의 표준편차. 거의 0 이면 검은 화면/단색. 모르면 -1 */
+    default double screenStdDev() {
+        return -1;
+    }
+
+    /** 진단용: 화면 캡처 쪽 상태 (프레임 수신 수, 오류 등) */
+    default String describeSource() {
+        return "";
+    }
 }

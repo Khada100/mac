@@ -109,8 +109,54 @@ echo "현재 화면: $TOP"
 if echo "$TOP" | grep -q launcher; then fail "터치 후에도 홈 화면 그대로 (터치가 실제로 안 먹음)"; else pass "아이콘 B 앱이 열림 (실제 터치 확인)"; fi
 shot 6_after_tap
 
-step "5. 정리"
-echo "---- 앱 로그 ----"
+echo "---- 앱 로그 (세로 테스트) ----"
+applog | tail -40
+adb logcat -c
+
+step "5. 회전 테스트: 세로에서 캡처 시작 → 가로 화면에서 매크로 (실제 게임과 같은 상황)"
+adb shell am broadcast -n "$PKG/.DebugCommandReceiver" -a com.imagemacro.action.DEBUG_STOP > /dev/null
+adb shell settings put system accelerometer_rotation 0
+adb shell settings put system user_rotation 1
+adb shell am start -W -a android.settings.SETTINGS > /dev/null
+sleep 6
+adb exec-out screencap -p > "$OUT/land.png"
+read -r LW LH < <(python3 "$UI" size "$OUT/land.png")
+echo "화면 크기: ${LW}x${LH}"
+if [ "$LW" -gt "$LH" ]; then pass "가로 화면으로 회전"; else fail "가로로 회전되지 않음"; fi
+if wait_log "화면 크기 변경 → ${LW}×${LH}" 10; then pass "캡처 크기도 가로로 조정"; else fail "캡처 크기 조정 로그 없음"; fi
+dump
+cp "$OUT/ui.xml" "$OUT/land_ui.xml"
+if python3 "$UI" titles "$OUT/land_ui.xml" > "$OUT/titles.txt"; then
+  cat "$OUT/titles.txt"
+  read -r ax1 ay1 ax2 ay2 aname < <(sed -n 1p "$OUT/titles.txt")
+  read -r bx1 by1 bx2 by2 bname < <(sed -n 2p "$OUT/titles.txt")
+  python3 "$UI" crop "$OUT/land.png" "$ax1" "$ay1" "$ax2" "$ay2" "$OUT/opt2.png"
+  python3 "$UI" crop "$OUT/land.png" "$bx1" "$by1" "$bx2" "$by2" "$OUT/reload2.png"
+  adb shell run-as "$PKG" rm -f files/templates/test_icon.png
+  push_file "$OUT/opt2.png" "files/templates/test_setting.png"
+  push_file "$OUT/reload2.png" "files/buttons/reload.png"
+  pass "가로 화면 템플릿 등록: 옵션=$aname, 새로고침=$bname"
+else
+  fail "설정 화면 항목을 2개 찾지 못함"
+  head -c 3000 "$OUT/land_ui.xml"
+fi
+shot 7_landscape
+sleep 3  # uiautomator 덤프 때문에 잠깐 꺼졌던 접근성 서비스가 다시 붙을 시간
+adb shell am broadcast -n "$PKG/.DebugCommandReceiver" -a com.imagemacro.action.DEBUG_START > /dev/null
+if wait_log "\[진단\]" 10; then pass "진단 로그 출력"; else fail "진단 로그 없음"; fi
+if wait_log "템플릿 발견] test_setting" 20; then pass "회전 후 회피 옵션 인식"; else fail "회전 후 회피 옵션 인식 못 함"; fi
+if wait_log "RELOAD 클릭" 10; then pass "회전 후 새로고침 터치"; else fail "회전 후 새로고침 터치 안 함"; fi
+sleep 4
+adb exec-out screencap -p > "$OUT/land_after.png"
+D=$(python3 "$UI" diff "$OUT/land.png" "$OUT/land_after.png")
+echo "터치 전후 화면 차이: $D"
+if python3 -c "import sys; sys.exit(0 if float('$D') > 5 else 1)"; then pass "터치로 화면이 바뀜 (가로 좌표도 정확)"; else fail "터치 후 화면이 그대로"; fi
+shot 8_landscape_after_tap
+adb shell am broadcast -n "$PKG/.DebugCommandReceiver" -a com.imagemacro.action.DEBUG_STOP > /dev/null
+adb shell settings put system user_rotation 0
+
+step "6. 정리"
+echo "---- 앱 로그 (회전 테스트) ----"
 applog | tail -60
 echo "---- 크래시 ----"
 adb logcat -d -s AndroidRuntime:E | tail -40

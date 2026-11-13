@@ -72,6 +72,14 @@ public class ScreenCaptureService extends Service implements FrameSource {
     private boolean stopping;
     private long lastSizeCheck;
 
+    // 진단용 카운터
+    private volatile long framesReceived;
+    private volatile long lastFrameUptime;
+    private volatile int acquireErrors;
+    private volatile String lastError = "";
+    private volatile boolean firstFrameLogged;
+    private volatile int sizeMismatchCount;
+
     private final MediaProjection.Callback projectionCallback = new MediaProjection.Callback() {
         @Override
         public void onStop() {
@@ -242,6 +250,7 @@ public class ScreenCaptureService extends Service implements FrameSource {
             capHeight = m.heightPixels;
             capDensity = m.densityDpi;
         }
+        firstFrameLogged = false;
         virtualDisplay.resize(capWidth, capHeight, capDensity);
         virtualDisplay.setSurface(fresh.getSurface());
         if (old != null) {
@@ -256,11 +265,18 @@ public class ScreenCaptureService extends Service implements FrameSource {
         try {
             image = reader.acquireNextImage();
         } catch (RuntimeException e) {
+            acquireErrors++;
+            lastError = e.getClass().getSimpleName() + ": " + e.getMessage();
+            if (acquireErrors == 1 || acquireErrors % 200 == 0) {
+                MacroController.get().log("[화면 캡처] 프레임 읽기 오류 (" + acquireErrors + "회): " + lastError);
+            }
             return;
         }
         if (image == null) {
             return;
         }
+        final int imgW = image.getWidth();
+        final int imgH = image.getHeight();
         synchronized (frameLock) {
             if (reader != imageReader || stopping) {
                 image.close();
@@ -270,6 +286,12 @@ public class ScreenCaptureService extends Service implements FrameSource {
                 pendingImage.close();
             }
             pendingImage = image;
+        }
+        framesReceived++;
+        lastFrameUptime = SystemClock.uptimeMillis();
+        if (!firstFrameLogged) {
+            firstFrameLogged = true;
+            MacroController.get().log(String.format(Locale.US, "[화면 캡처] 화면 수신 시작 (%d×%d)", imgW, imgH));
         }
     }
 
@@ -302,6 +324,21 @@ public class ScreenCaptureService extends Service implements FrameSource {
             consumer.accept(frameData, frameWidth, frameHeight);
             return true;
         }
+    }
+
+    @Override
+    public String debugInfo() {
+        DisplayMetrics m = realMetrics();
+        long ago = lastFrameUptime == 0 ? -1 : (SystemClock.uptimeMillis() - lastFrameUptime) / 1000;
+        String s = String.format(Locale.US, "수신 %d장(마지막 %s), 캡처 %d×%d / 실제 화면 %d×%d",
+                framesReceived, ago < 0 ? "없음" : ago + "초 전", capWidth, capHeight, m.widthPixels, m.heightPixels);
+        if (sizeMismatchCount > 0) {
+            s += ", 크기 불일치 " + sizeMismatchCount + "회";
+        }
+        if (acquireErrors > 0) {
+            s += ", 읽기 오류 " + acquireErrors + "회 (" + lastError + ")";
+        }
+        return s;
     }
 
     /** 최신 화면을 PNG 로 저장 (이미지 등록용). */
@@ -377,6 +414,7 @@ public class ScreenCaptureService extends Service implements FrameSource {
         lastSizeCheck = now;
         DisplayMetrics m = realMetrics();
         if (m.widthPixels != capWidth || m.heightPixels != capHeight) {
+            sizeMismatchCount++;
             Handler h = captureHandler;
             if (h != null) {
                 h.post(this::resizeIfNeeded);

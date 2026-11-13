@@ -45,6 +45,41 @@ def cmd_icons(path):
     return 0 if len(picked) >= 2 else 1
 
 
+def cmd_titles(path, min_top="420"):
+    """설정 앱 목록에서 항목 제목 2개를 골라 'x1 y1 x2 y2 이름' 두 줄 출력 (떠 있는 조작 버튼 아래쪽만)"""
+    picked = []
+    for n in nodes(path):
+        rid = n.get("resource-id", "")
+        text = (n.get("text") or "").strip()
+        b = bounds(n)
+        if not b or not rid.endswith("/title") or not text:
+            continue
+        w, h = b[2] - b[0], b[3] - b[1]
+        if w >= 120 and h >= 20 and b[1] >= int(min_top) and text not in [t for t, _ in picked]:
+            picked.append((text, b))
+    for text, b in picked[:2]:
+        print(*b, text.replace(" ", "_"))
+    return 0 if len(picked) >= 2 else 1
+
+
+def cmd_size(src):
+    from PIL import Image
+    w, h = Image.open(src).size
+    print(w, h)
+    return 0
+
+
+def cmd_diff(a, b):
+    """두 스크린샷의 평균 밝기 차이 출력"""
+    from PIL import Image, ImageChops, ImageStat
+    ia, ib = Image.open(a).convert("L"), Image.open(b).convert("L")
+    if ia.size != ib.size:
+        print(255)
+        return 0
+    print(round(ImageStat.Stat(ImageChops.difference(ia, ib)).mean[0], 2))
+    return 0
+
+
 def cmd_crop(src, x1, y1, x2, y2, out):
     from PIL import Image
     Image.open(src).convert("RGB").crop((int(x1), int(y1), int(x2), int(y2))).save(out)

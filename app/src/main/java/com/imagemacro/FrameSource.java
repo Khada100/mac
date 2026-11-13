@@ -10,4 +10,9 @@ public interface FrameSource {
 
     /** 최신 프레임이 있으면 consumer 를 호출하고 true, 없으면 false. */
     boolean withLatestFrame(Consumer consumer);
+
+    /** 진단용 상태 문자열 */
+    default String debugInfo() {
+        return "";
+    }
 }
