@@ -42,6 +42,7 @@
             <intent-filter>
                 <action android:name="com.imagemacro.action.DEBUG_START" />
                 <action android:name="com.imagemacro.action.DEBUG_STOP" />
+                <action android:name="com.imagemacro.action.DEBUG_SNAPSHOT" />
             </intent-filter>
         </receiver>
 

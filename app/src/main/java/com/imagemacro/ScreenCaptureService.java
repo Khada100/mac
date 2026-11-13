@@ -35,9 +35,13 @@ import java.util.Locale;
  * MediaProjection 으로 전체 화면을 계속 캡처해 두는 포그라운드 서비스.
  * (윈도우판의 mss 화면 캡처 역할)
  *
- * - 화면이 바뀔 때만 새 프레임이 들어오므로, 마지막 프레임을 보관해 두고
- *   엔진이 요청할 때 최신 프레임을 넘겨준다.
- * - 가로/세로 회전 시 캡처 크기를 화면 크기에 맞춰 다시 조정한다 (좌표가 어긋나지 않게).
+ * 회전 대응: 캡처용 가상 화면을 '긴 변 × 긴 변' 정사각형으로 한 번만 만든다.
+ * 그러면 세로/가로 어느 쪽이든 실제 화면이 1:1 크기 그대로 정사각형 가운데에 들어가므로
+ * (위아래 또는 좌우에 검은 여백) 그 부분만 잘라 쓰면 된다.
+ * 예전처럼 회전할 때마다 가상 화면 크기를 바꾸면, 타이밍에 따라 화면이 작게 쪼그라든 채
+ * 굳어 버리는 문제가 있었다 (에뮬레이터 테스트와 사용자 기기에서 확인).
+ *
+ * 화면이 바뀔 때만 새 프레임이 들어오므로, 마지막 프레임을 보관해 두고 엔진이 요청할 때 넘겨준다.
  */
 public class ScreenCaptureService extends Service implements FrameSource {
 
@@ -60,9 +64,13 @@ public class ScreenCaptureService extends Service implements FrameSource {
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private ImageReader imageReader;
-    private volatile int capWidth;
-    private volatile int capHeight;
+    /** 가상 화면(정사각형) 한 변 길이 */
+    private volatile int squareSize;
     private volatile int capDensity;
+    /** 지금 실제 화면 크기 (회전에 따라 바뀜) = 잘라 낼 크기 */
+    private volatile int contentWidth;
+    private volatile int contentHeight;
+    private long lastMetricsCheck;
 
     private final Object frameLock = new Object();
     private Image pendingImage;
@@ -70,15 +78,15 @@ public class ScreenCaptureService extends Service implements FrameSource {
     private int frameWidth;
     private int frameHeight;
     private boolean stopping;
-    private long lastSizeCheck;
 
-    // 진단용 카운터
+    // 진단용
     private volatile long framesReceived;
     private volatile long lastFrameUptime;
     private volatile int acquireErrors;
     private volatile String lastError = "";
     private volatile boolean firstFrameLogged;
-    private volatile int sizeMismatchCount;
+    private volatile double marginBrightness = -1;
+    private volatile boolean marginWarned;
 
     private final MediaProjection.Callback projectionCallback = new MediaProjection.Callback() {
         @Override
@@ -146,7 +154,8 @@ public class ScreenCaptureService extends Service implements FrameSource {
         }
 
         instance = this;
-        MacroController.get().log(String.format(Locale.US, "[화면 캡처] 시작 (%d×%d)", capWidth, capHeight));
+        MacroController.get().log(String.format(Locale.US, "[화면 캡처] 시작 (화면 %d×%d, 캡처 %d×%d 정사각형)",
+                contentWidth, contentHeight, squareSize, squareSize));
         MacroController.get().notifyStateChanged();
         return START_NOT_STICKY;
     }
@@ -154,8 +163,9 @@ public class ScreenCaptureService extends Service implements FrameSource {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        if (captureHandler != null) {
-            captureHandler.post(this::resizeIfNeeded);
+        Handler h = captureHandler;
+        if (h != null) {
+            h.post(() -> updateContentSize(true));
         }
     }
 
@@ -208,56 +218,88 @@ public class ScreenCaptureService extends Service implements FrameSource {
 
     private void createVirtualDisplay() {
         DisplayMetrics m = realMetrics();
-        capWidth = m.widthPixels;
-        capHeight = m.heightPixels;
+        contentWidth = m.widthPixels;
+        contentHeight = m.heightPixels;
+        squareSize = Math.max(m.widthPixels, m.heightPixels);
         capDensity = m.densityDpi;
-        ImageReader reader = newReader(capWidth, capHeight);
+        ImageReader reader = newReader(squareSize);
         synchronized (frameLock) {
             imageReader = reader;
         }
         virtualDisplay = projection.createVirtualDisplay(
                 "ImageMacroCapture",
-                capWidth, capHeight, capDensity,
+                squareSize, squareSize, capDensity,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.getSurface(), null, captureHandler);
     }
 
-    private ImageReader newReader(int width, int height) {
-        ImageReader r = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 4);
+    private ImageReader newReader(int size) {
+        ImageReader r = ImageReader.newInstance(size, size, PixelFormat.RGBA_8888, 3);
         r.setOnImageAvailableListener(this::onImageAvailable, captureHandler);
         return r;
     }
 
-    /** 화면 회전 등으로 크기가 바뀌면 캡처 크기도 맞춘다. (캡처 스레드에서 실행) */
-    private void resizeIfNeeded() {
-        if (projection == null || virtualDisplay == null || stopping) {
+    /**
+     * 실제 화면 크기를 다시 읽어 잘라 낼 크기를 맞춘다 (회전 감지).
+     * 화면 해상도 자체가 바뀐 드문 경우에만 정사각형 크기를 바꾼다.
+     */
+    private void updateContentSize(boolean force) {
+        long now = SystemClock.uptimeMillis();
+        if (!force && now - lastMetricsCheck < 300) {
             return;
         }
+        lastMetricsCheck = now;
         DisplayMetrics m = realMetrics();
-        if (m.widthPixels == capWidth && m.heightPixels == capHeight) {
+        int w = m.widthPixels;
+        int h = m.heightPixels;
+        if (w == contentWidth && h == contentHeight) {
             return;
         }
-        ImageReader old = imageReader;
-        ImageReader fresh = newReader(m.widthPixels, m.heightPixels);
         synchronized (frameLock) {
-            if (pendingImage != null) {
-                pendingImage.close();
-                pendingImage = null;
+            contentWidth = w;
+            contentHeight = h;
+            frameData = null; // 이전 방향의 화면은 버림
+            marginWarned = false;
+        }
+        MacroController.get().log(String.format(Locale.US, "[화면 캡처] 화면 방향 변경 → %d×%d", w, h));
+
+        int need = Math.max(w, h);
+        if (need != squareSize) {
+            resizeSquare(need, m.densityDpi);
+        }
+    }
+
+    /** 화면 해상도 변경 같은 드문 경우: 정사각형 크기 조정 (캡처 스레드에서 실행) */
+    private void resizeSquare(final int size, final int density) {
+        Handler h = captureHandler;
+        if (h == null) {
+            return;
+        }
+        h.post(() -> {
+            if (projection == null || virtualDisplay == null || stopping || size == squareSize) {
+                return;
             }
-            frameData = null;
-            imageReader = fresh;
-            capWidth = m.widthPixels;
-            capHeight = m.heightPixels;
-            capDensity = m.densityDpi;
-        }
-        firstFrameLogged = false;
-        virtualDisplay.resize(capWidth, capHeight, capDensity);
-        virtualDisplay.setSurface(fresh.getSurface());
-        if (old != null) {
-            old.setOnImageAvailableListener(null, null);
-            old.close();
-        }
-        MacroController.get().log(String.format(Locale.US, "[화면 캡처] 화면 크기 변경 → %d×%d", capWidth, capHeight));
+            ImageReader old = imageReader;
+            ImageReader fresh = newReader(size);
+            synchronized (frameLock) {
+                if (pendingImage != null) {
+                    pendingImage.close();
+                    pendingImage = null;
+                }
+                frameData = null;
+                imageReader = fresh;
+                squareSize = size;
+                capDensity = density;
+            }
+            firstFrameLogged = false;
+            virtualDisplay.resize(size, size, density);
+            virtualDisplay.setSurface(fresh.getSurface());
+            if (old != null) {
+                old.setOnImageAvailableListener(null, null);
+                old.close();
+            }
+            MacroController.get().log(String.format(Locale.US, "[화면 캡처] 화면 해상도 변경 → 캡처 %d×%d", size, size));
+        });
     }
 
     private void onImageAvailable(ImageReader reader) {
@@ -301,9 +343,7 @@ public class ScreenCaptureService extends Service implements FrameSource {
 
     @Override
     public boolean withLatestFrame(FrameSource.Consumer consumer) {
-        if (!displaySizeMatches()) {
-            return false;
-        }
+        updateContentSize(false);
         synchronized (frameLock) {
             if (stopping) {
                 return false;
@@ -313,6 +353,7 @@ public class ScreenCaptureService extends Service implements FrameSource {
                     copyImage(pendingImage);
                 } catch (RuntimeException e) {
                     frameData = null;
+                    lastError = "복사 오류 " + e.getClass().getSimpleName() + ": " + e.getMessage();
                 } finally {
                     pendingImage.close();
                     pendingImage = null;
@@ -328,15 +369,15 @@ public class ScreenCaptureService extends Service implements FrameSource {
 
     @Override
     public String debugInfo() {
-        DisplayMetrics m = realMetrics();
         long ago = lastFrameUptime == 0 ? -1 : (SystemClock.uptimeMillis() - lastFrameUptime) / 1000;
-        String s = String.format(Locale.US, "수신 %d장(마지막 %s), 캡처 %d×%d / 실제 화면 %d×%d",
-                framesReceived, ago < 0 ? "없음" : ago + "초 전", capWidth, capHeight, m.widthPixels, m.heightPixels);
-        if (sizeMismatchCount > 0) {
-            s += ", 크기 불일치 " + sizeMismatchCount + "회";
+        String s = String.format(Locale.US, "수신 %d장(마지막 %s), 화면 %d×%d / 캡처 %d×%d",
+                framesReceived, ago < 0 ? "없음" : ago + "초 전", contentWidth, contentHeight, squareSize, squareSize);
+        double mb = marginBrightness;
+        if (mb >= 0) {
+            s += String.format(Locale.US, ", 여백 밝기 %.0f(정상 0)", mb);
         }
-        if (acquireErrors > 0) {
-            s += ", 읽기 오류 " + acquireErrors + "회 (" + lastError + ")";
+        if (acquireErrors > 0 || lastError.startsWith("복사")) {
+            s += ", 오류 " + acquireErrors + "회 (" + lastError + ")";
         }
         return s;
     }
@@ -365,32 +406,38 @@ public class ScreenCaptureService extends Service implements FrameSource {
         }
     }
 
-    /** frameLock 안에서 호출. ImageReader 의 행 패딩(rowStride)을 제거하며 복사. */
+    /**
+     * frameLock 안에서 호출. 정사각형 캡처에서 실제 화면 부분(가운데)만 잘라 복사.
+     * 안드로이드는 화면을 비율을 지켜 가운데 맞춤으로 넣으므로 위치는 ((한 변 - 폭) / 2, (한 변 - 높이) / 2).
+     */
     private void copyImage(Image img) {
         Image.Plane plane = img.getPlanes()[0];
         ByteBuffer buf = plane.getBuffer();
-        int w = img.getWidth();
-        int h = img.getHeight();
+        int imgW = img.getWidth();
+        int imgH = img.getHeight();
         int pixelStride = plane.getPixelStride();
         int rowStride = plane.getRowStride();
+
+        int w = contentWidth;
+        int h = contentHeight;
+        if (w <= 0 || h <= 0 || w > imgW || h > imgH) {
+            w = imgW;
+            h = imgH;
+        }
+        int left = (imgW - w) / 2;
+        int top = (imgH - h) / 2;
         int rowBytes = w * 4;
         if (frameData == null || frameData.length != rowBytes * h) {
             frameData = new byte[rowBytes * h];
         }
         if (pixelStride == 4) {
-            if (rowStride == rowBytes) {
-                buf.position(0);
-                buf.get(frameData, 0, rowBytes * h);
-            } else {
-                for (int y = 0; y < h; y++) {
-                    buf.position(y * rowStride);
-                    buf.get(frameData, y * rowBytes, rowBytes);
-                }
+            for (int y = 0; y < h; y++) {
+                buf.position((top + y) * rowStride + left * 4);
+                buf.get(frameData, y * rowBytes, rowBytes);
             }
         } else {
-            // 거의 없는 경우: 픽셀 단위 복사
             for (int y = 0; y < h; y++) {
-                int src = y * rowStride;
+                int src = (top + y) * rowStride + left * pixelStride;
                 int dst = y * rowBytes;
                 for (int x = 0; x < w; x++) {
                     int p = src + x * pixelStride;
@@ -403,25 +450,47 @@ public class ScreenCaptureService extends Service implements FrameSource {
         }
         frameWidth = w;
         frameHeight = h;
+        checkMargins(buf, imgW, imgH, rowStride, pixelStride, left, top);
     }
 
-    /** 캡처 크기와 현재 화면 크기가 다르면(회전 직후) 조정을 예약하고 false. */
-    private boolean displaySizeMatches() {
-        long now = SystemClock.uptimeMillis();
-        if (now - lastSizeCheck < 300) {
-            return true;
-        }
-        lastSizeCheck = now;
-        DisplayMetrics m = realMetrics();
-        if (m.widthPixels != capWidth || m.heightPixels != capHeight) {
-            sizeMismatchCount++;
-            Handler h = captureHandler;
-            if (h != null) {
-                h.post(this::resizeIfNeeded);
+    /**
+     * 진단: 여백(잘라 낸 바깥쪽)은 원래 검은색이어야 한다. 밝으면 화면 위치가 예상과 다르다는 뜻.
+     * 여백 가운데 줄 몇 개만 드문드문 확인 (가벼움).
+     */
+    private void checkMargins(ByteBuffer buf, int imgW, int imgH, int rowStride, int pixelStride, int left, int top) {
+        long sum = 0;
+        int count = 0;
+        if (top > 0) {
+            int[] rows = {top / 2, imgH - 1 - top / 2};
+            for (int r : rows) {
+                for (int x = 0; x < imgW; x += 16) {
+                    int p = r * rowStride + x * pixelStride;
+                    sum += (buf.get(p) & 0xff) + (buf.get(p + 1) & 0xff) + (buf.get(p + 2) & 0xff);
+                    count += 3;
+                }
             }
-            return false;
         }
-        return true;
+        if (left > 0) {
+            int[] cols = {left / 2, imgW - 1 - left / 2};
+            for (int c : cols) {
+                for (int y = 0; y < imgH; y += 16) {
+                    int p = y * rowStride + c * pixelStride;
+                    sum += (buf.get(p) & 0xff) + (buf.get(p + 1) & 0xff) + (buf.get(p + 2) & 0xff);
+                    count += 3;
+                }
+            }
+        }
+        if (count == 0) {
+            marginBrightness = -1;
+            return;
+        }
+        double mean = sum / (double) count;
+        marginBrightness = mean;
+        if (mean > 30 && !marginWarned) {
+            marginWarned = true;
+            MacroController.get().log(String.format(Locale.US,
+                    "[화면 캡처] 경고: 캡처 화면 위치가 예상과 달라요 (여백 밝기 %.0f). 캡처를 중지했다가 다시 시작해 보세요.", mean));
+        }
     }
 
     @SuppressWarnings("deprecation")

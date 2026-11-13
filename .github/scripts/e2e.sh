@@ -33,6 +33,26 @@ tap_text() {
   echo "tap '$2' at $xy"
   adb shell input tap $xy
 }
+snap_compare() { # 이름 : 앱이 캡처해서 보고 있는 화면 vs 실제 화면(screencap) 비교
+  adb shell run-as "$PKG" rm -f files/debug_frame.png
+  adb shell am broadcast -n "$PKG/.DebugCommandReceiver" -a com.imagemacro.action.DEBUG_SNAPSHOT > /dev/null
+  for _ in $(seq 1 10); do
+    if adb shell run-as "$PKG" ls files/debug_frame.png > /dev/null 2>&1; then break; fi
+    sleep 0.5
+  done
+  sleep 0.5
+  adb exec-out screencap -p > "$OUT/$1_real.png"
+  adb exec-out run-as "$PKG" cat files/debug_frame.png > "$OUT/$1_app.png"
+  local d
+  d=$(python3 "$UI" diff "$OUT/$1_real.png" "$OUT/$1_app.png" 2>/dev/null || echo 255)
+  echo "[$1] 앱 캡처 $(python3 "$UI" size "$OUT/$1_app.png" 2>/dev/null) vs 실제 $(python3 "$UI" size "$OUT/$1_real.png") → 평균 차이 $d"
+  python3 "$UI" shot "$OUT/$1_app.png" "app_$1" 2>/dev/null
+  if python3 -c "import sys; sys.exit(0 if float('$d') < 8 else 1)"; then
+    pass "앱이 보는 화면 = 실제 화면 ($1)"
+  else
+    fail "앱이 보는 화면이 실제와 다름 ($1, 차이 $d)"
+  fi
+}
 push_file() { # 로컬파일, 앱 내부 경로
   adb push "$1" /data/local/tmp/e2e_tmp.png > /dev/null
   adb shell "run-as $PKG sh -c 'cat > $2' < /data/local/tmp/e2e_tmp.png"
@@ -67,6 +87,22 @@ fi
 if wait_log "화면 캡처] 시작" 10; then pass "화면 캡처 시작"; else fail "화면 캡처 시작 안 됨"; fi
 sleep 2
 shot 3_after_capture
+
+step "2-1. 앱이 보는 화면이 실제 화면과 같은지 (세로 + 여러 번 회전)"
+adb shell settings put system accelerometer_rotation 0
+adb shell settings put system user_rotation 0
+adb shell am start -W -a android.settings.SETTINGS > /dev/null
+sleep 4
+snap_compare portrait
+for ROT in 1 0 3 1 0; do
+  adb shell settings put system user_rotation "$ROT"
+  sleep 4
+  snap_compare "rot$ROT"
+done
+adb shell settings put system user_rotation 0
+sleep 3
+echo "---- 회전 중 앱 로그 ----"
+applog | grep -E "화면 캡처|스냅샷" | tail -20
 
 step "3. 홈 화면 아이콘으로 템플릿 만들기"
 adb shell input keyevent KEYCODE_HOME
@@ -123,7 +159,7 @@ adb exec-out screencap -p > "$OUT/land.png"
 read -r LW LH < <(python3 "$UI" size "$OUT/land.png")
 echo "화면 크기: ${LW}x${LH}"
 if [ "$LW" -gt "$LH" ]; then pass "가로 화면으로 회전"; else fail "가로로 회전되지 않음"; fi
-if wait_log "화면 크기 변경 → ${LW}×${LH}" 10; then pass "캡처 크기도 가로로 조정"; else fail "캡처 크기 조정 로그 없음"; fi
+if wait_log "화면 방향 변경 → ${LW}×${LH}" 10; then pass "캡처가 가로 화면을 인식"; else fail "화면 방향 변경 로그 없음"; fi
 dump
 cp "$OUT/ui.xml" "$OUT/land_ui.xml"
 if python3 "$UI" titles "$OUT/land_ui.xml" > "$OUT/titles.txt"; then
