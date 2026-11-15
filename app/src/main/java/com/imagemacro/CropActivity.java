@@ -20,12 +20,16 @@ import java.util.Locale;
 
 /**
  * 이미지 등록 화면: 캡처한 화면(또는 갤러리 스크린샷)에서 영역을 잘라
- * 버튼 이미지(start/reload/collect1/collect2) 또는 회피 옵션 이미지로 저장한다.
+ * 버튼 이미지(start/reload/collect1/collect2), 회피 옵션 이미지, 또는 순서에서 쓰는 일반 이미지
+ * (상점, 판매 버튼, 가득 참 표시 등)로 저장한다.
  * 한 장의 캡처에서 여러 개를 연달아 저장할 수 있다.
  */
 public class CropActivity extends Activity {
 
     public static final String EXTRA_IMAGE_PATH = "imagePath";
+
+    /** 스피너에서 '순서용 일반 이미지' 항목의 위치. */
+    private static final int GENERAL_POS = ImageStore.BUTTON_KEYS.length + 1;
 
     private Bitmap source;
     private CropView cropView;
@@ -59,18 +63,22 @@ public class CropActivity extends Activity {
         cropView.setOnSelectionChangedListener(this::updateInfo);
         cropView.setBitmap(source);
 
-        String[] items = new String[ImageStore.BUTTON_KEYS.length + 1];
+        // 0 = 회피 옵션(새로), 1..4 = 버튼 4개, 5 = 순서용 일반 이미지(새로)
+        String[] items = new String[ImageStore.BUTTON_KEYS.length + 2];
         items[0] = "회피 옵션 (새로 추가)";
         for (int i = 0; i < ImageStore.BUTTON_KEYS.length; i++) {
             items[i + 1] = ImageStore.BUTTON_LABELS[i];
         }
+        items[ImageStore.BUTTON_KEYS.length + 1] = "순서용 이미지 (새로 추가: 상점, 판매 버튼 ...)";
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, items);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                editName.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
+                boolean needsName = position == 0 || position == GENERAL_POS;
+                editName.setVisibility(needsName ? View.VISIBLE : View.GONE);
+                editName.setHint(position == GENERAL_POS ? "이미지 이름 (예: 상점)" : "옵션 이름 (예: 빙결)");
             }
 
             @Override
@@ -116,15 +124,20 @@ public class CropActivity extends Activity {
         int pos = spinner.getSelectedItemPosition();
         File target;
         String label;
-        if (pos <= 0) {
+        if (pos == 0 || pos == GENERAL_POS) {
             String name = ImageStore.sanitize(editName.getText().toString());
             if (name.isEmpty()) {
-                toast("옵션 이름을 입력하세요 (예: 빙결).");
+                toast(pos == 0 ? "옵션 이름을 입력하세요 (예: 빙결)." : "이미지 이름을 입력하세요 (예: 상점).");
                 editName.requestFocus();
                 return;
             }
-            target = ImageStore.templateFile(this, name);
-            label = "회피 옵션 '" + name + "'";
+            if (pos == 0) {
+                target = ImageStore.templateFile(this, name);
+                label = "회피 옵션 '" + name + "'";
+            } else {
+                target = ImageStore.imageFile(this, name);
+                label = "순서용 이미지 '" + name + "'";
+            }
         } else {
             String key = ImageStore.BUTTON_KEYS[pos - 1];
             target = ImageStore.buttonFile(this, key);
@@ -147,7 +160,7 @@ public class CropActivity extends Activity {
         MacroController.get().log(String.format(Locale.US, "[등록] %s 저장 (%d×%d)%s",
                 label, r.width(), r.height(), existed ? " - 기존 이미지 교체" : ""));
         toast(label + " 저장됨 (" + savedCount + "개째). 계속 다른 영역을 저장하거나 [닫기]를 누르세요.");
-        if (pos <= 0) {
+        if (pos == 0 || pos == GENERAL_POS) {
             editName.setText("");
         }
         cropView.clearSelection();

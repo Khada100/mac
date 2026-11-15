@@ -106,6 +106,17 @@ public final class MacroSettings {
         return c;
     }
 
+    public SequenceEngine.Config toSequenceConfig() {
+        SequenceEngine.Config c = new SequenceEngine.Config();
+        c.optionThreshold = optionThreshold;
+        c.buttonThreshold = buttonThreshold;
+        c.intervalMs = intervalMs;
+        c.clickDelayMs = clickDelayMs;
+        c.defaultTimeoutSeconds = buttonTimeoutSeconds;
+        c.settleMaxMs = settleMaxMs;
+        return c;
+    }
+
     public static double parseDouble(String s, double def) {
         if (s == null) {
             return def;

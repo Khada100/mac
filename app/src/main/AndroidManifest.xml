@@ -24,6 +24,15 @@
             </intent-filter>
         </activity>
 
+        <!-- 순서 목록 / 편집 화면 -->
+        <activity
+            android:name=".SequenceListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SequenceEditorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- 이미지 자르기/등록 화면. 게임 위에서 열고 닫으면 다시 게임으로 돌아가도록 별도 태스크 -->
         <activity
             android:name=".CropActivity"

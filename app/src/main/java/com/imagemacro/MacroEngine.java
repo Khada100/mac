@@ -21,7 +21,7 @@ import java.util.Locale;
  *
  * 안드로이드 API 에 의존하지 않는 순수 Java 클래스라 PC 에서도 테스트할 수 있다.
  */
-public final class MacroEngine implements Runnable {
+public final class MacroEngine implements MacroRunner {
 
     public static final String START = "btn:start";
     public static final String RELOAD = "btn:reload";
@@ -103,6 +103,7 @@ public final class MacroEngine implements Runnable {
         this.config = config;
     }
 
+    @Override
     public boolean isRunning() {
         return running;
     }
@@ -116,6 +117,7 @@ public final class MacroEngine implements Runnable {
     }
 
     /** 어느 스레드에서든 호출 가능. 대기 중이면 즉시 깨워서 끝낸다. */
+    @Override
     public void stop() {
         running = false;
         Thread t = thread;

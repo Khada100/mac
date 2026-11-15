@@ -47,7 +47,7 @@ public final class MacroController {
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.US);
 
     private boolean openCvReady;
-    private volatile MacroEngine engine;
+    private volatile MacroRunner engine;
     private Thread engineThread;
     private volatile String status = "정지";
 
@@ -91,7 +91,7 @@ public final class MacroController {
     // ------------------------------------------------------------------
 
     public boolean isMacroRunning() {
-        MacroEngine e = engine;
+        MacroRunner e = engine;
         return e != null && e.isRunning();
     }
 
@@ -114,8 +114,58 @@ public final class MacroController {
         }
 
         MacroSettings s = MacroSettings.load(ctx);
+        Sequence seq = SequenceStore.active(ctx);
         final OpenCvVision vision = new OpenCvVision(capture, s.processScale, s.parseScales());
 
+        MacroEngine.Tapper tapper = (x, y) -> {
+            MacroAccessibilityService a = MacroAccessibilityService.get();
+            return a != null && a.tap(x, y);
+        };
+        MacroEngine.Listener listener = new MacroEngine.Listener() {
+            @Override
+            public void onLog(String message) {
+                log(message);
+            }
+
+            @Override
+            public void onStatus(String st) {
+                setStatus(st);
+            }
+
+            @Override
+            public void onFinished() {
+                if (!isMacroRunning()) {
+                    setStatus("정지");
+                }
+                notifyStateChanged();
+            }
+        };
+
+        final MacroRunner runner = seq.classic
+                ? prepareClassic(ctx, s, vision, tapper, listener)
+                : prepareSequence(ctx, s, seq, vision, tapper, listener);
+        if (runner == null) {
+            vision.close();
+            notifyStateChanged();
+            return;
+        }
+
+        engine = runner;
+        engineThread = new Thread(() -> {
+            try {
+                runner.run();
+            } finally {
+                vision.close();
+            }
+        }, "macro-engine");
+        engineThread.start();
+        log("=== 매크로를 시작합니다: " + seq.name + " ===");
+        notifyStateChanged();
+    }
+
+    /** 기존 방식 (A컨텐츠). 예전 버전과 똑같이 동작한다. 준비가 안 됐으면 null. */
+    private MacroRunner prepareClassic(Context ctx, MacroSettings s, OpenCvVision vision,
+                                       MacroEngine.Tapper tapper, MacroEngine.Listener listener) {
         List<String> problems = new ArrayList<>();
         for (int i = 0; i < ImageStore.BUTTON_KEYS.length; i++) {
             String key = ImageStore.BUTTON_KEYS[i];
@@ -144,51 +194,64 @@ public final class MacroController {
             for (String p : problems) {
                 log("   · " + p);
             }
-            vision.close();
-            notifyStateChanged();
-            return;
+            return null;
+        }
+        return new MacroEngine(vision, tapper, listener, ids, names, s.toEngineConfig());
+    }
+
+    /** 사용자가 짠 순서 (블록 방식). 빈 칸이나 등록 안 된 이미지가 있으면 알려 주고 null. */
+    private MacroRunner prepareSequence(Context ctx, MacroSettings s, Sequence seq, OpenCvVision vision,
+                                        MacroEngine.Tapper tapper, MacroEngine.Listener listener) {
+        List<String> problems = seq.validate();
+        if (!problems.isEmpty()) {
+            log("[오류] '" + seq.name + "' 순서에 고칠 곳이 있어요:");
+            for (String p : problems) {
+                log("   · " + p);
+            }
+            return null;
         }
 
-        MacroEngine.Tapper tapper = (x, y) -> {
-            MacroAccessibilityService a = MacroAccessibilityService.get();
-            return a != null && a.tap(x, y);
-        };
-        MacroEngine.Listener listener = new MacroEngine.Listener() {
-            @Override
-            public void onLog(String message) {
-                log(message);
-            }
-
-            @Override
-            public void onStatus(String st) {
-                setStatus(st);
-            }
-
-            @Override
-            public void onFinished() {
-                if (!isMacroRunning()) {
-                    setStatus("정지");
+        // 옵션 이미지: 순서에서 '옵션 전체'를 쓰면 등록된 모든 옵션을 읽어서 펼친다.
+        List<String> optionRefs = new ArrayList<>();
+        if (seq.usesAllOptions()) {
+            for (String ref : ImageStore.optionRefs(ctx)) {
+                String err = vision.addTemplate(ref, ImageStore.fileForRef(ctx, ref));
+                if (err == null) {
+                    optionRefs.add(ref);
+                } else {
+                    log("[경고] 옵션 이미지 건너뜀: " + Sequence.labelOf(ref) + " - " + err);
                 }
-                notifyStateChanged();
             }
-        };
+            if (optionRefs.isEmpty()) {
+                log("[오류] 이 순서는 '회피 옵션 전체'를 쓰는데 등록된 옵션 이미지가 없어요. 옵션 이미지를 1개 이상 등록하세요.");
+                return null;
+            }
+        }
+        Sequence expanded = seq.expandOptions(optionRefs);
 
-        final MacroEngine e = new MacroEngine(vision, tapper, listener, ids, names, s.toEngineConfig());
-        engine = e;
-        engineThread = new Thread(() -> {
-            try {
-                e.run();
-            } finally {
-                vision.close();
+        List<String> missing = new ArrayList<>();
+        for (String ref : expanded.imageRefs()) {
+            if (ref.startsWith("opt:") && optionRefs.contains(ref)) {
+                continue; // 위에서 이미 읽음
             }
-        }, "macro-engine");
-        engineThread.start();
-        log("=== 매크로를 시작합니다 ===");
-        notifyStateChanged();
+            File f = ImageStore.fileForRef(ctx, ref);
+            String err = f == null ? "알 수 없는 이미지 종류" : vision.addTemplate(ref, f);
+            if (err != null) {
+                missing.add(Sequence.labelOf(ref) + " - " + err);
+            }
+        }
+        if (!missing.isEmpty()) {
+            log("[오류] 시작할 수 없습니다. 아래 이미지를 먼저 등록하세요:");
+            for (String m : missing) {
+                log("   · " + m);
+            }
+            return null;
+        }
+        return new SequenceEngine(vision, tapper, listener, expanded, s.toSequenceConfig());
     }
 
     public synchronized void stopMacro(String reason) {
-        MacroEngine e = engine;
+        MacroRunner e = engine;
         if (e != null && e.isRunning()) {
             e.stop();
             log("=== 매크로 정지: " + reason + " ===");

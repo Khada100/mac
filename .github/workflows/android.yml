@@ -55,10 +55,22 @@ jobs:
         run: |
           cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk ImageMacro.apk
           cp app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk ImageMacro-armv7.apk
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest ImageMacro.apk ImageMacro-armv7.apk \
-            --target "$GITHUB_SHA" \
-            --title "최신 APK (${GITHUB_REF_NAME} · ${GITHUB_SHA::7})" \
+          if [ "$GITHUB_REF_NAME" = "android-app" ]; then
+            # 평소 쓰는 안정 버전: 항상 'latest' 릴리스 하나만 유지
+            TAG=latest
+            TITLE="최신 APK (${GITHUB_REF_NAME} · ${GITHUB_SHA::7})"
+            EXTRA=""
+          else
+            # 다른 브랜치(새 기능 시험판)는 'latest' 를 건드리지 않고 별도 시험판 릴리스로 올린다
+            SAFE=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '-')
+            TAG="preview-${SAFE}"
+            TITLE="시험판 APK (${GITHUB_REF_NAME} · ${GITHUB_SHA::7})"
+            EXTRA="--prerelease"
+          fi
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" ImageMacro.apk ImageMacro-armv7.apk \
+            --target "$GITHUB_SHA" $EXTRA \
+            --title "$TITLE" \
             --notes "폰 브라우저에서 ImageMacro.apk 를 눌러 내려받고 설치하세요 (요즘 폰 대부분). 설치가 안 되는 아주 오래된 폰(32비트)은 ImageMacro-armv7.apk. 사용법은 README 참고."
 
   emulator-test:

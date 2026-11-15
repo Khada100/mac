@@ -16,6 +16,9 @@ import java.util.Locale;
  * 등록한 이미지 저장소 (앱 전용 폴더).
  *   files/buttons/start.png, reload.png, collect1.png, collect2.png   - 윈도우판 button/ 폴더
  *   files/templates/이름.png                                          - 윈도우판 templates/ 폴더
+ *   files/images/이름.png                                             - 블록 순서에서 쓰는 일반 이미지 (상점, 판매, 가득 참 표시 ...)
+ *
+ * 순서(Sequence)에서는 이미지를 'btn:start', 'opt:빙결', 'img:상점' 같은 참조 문자열로 가리킨다.
  */
 public final class ImageStore {
 
@@ -38,6 +41,10 @@ public final class ImageStore {
         return dir(c, "buttons");
     }
 
+    public static File imagesDir(Context c) {
+        return dir(c, "images");
+    }
+
     private static File dir(Context c, String name) {
         File d = new File(c.getFilesDir(), name);
         if (!d.isDirectory()) {
@@ -55,19 +62,78 @@ public final class ImageStore {
         return new File(templatesDir(c), sanitize(name) + ".png");
     }
 
+    public static File imageFile(Context c, String name) {
+        return new File(imagesDir(c), sanitize(name) + ".png");
+    }
+
     /** 화면 캡처/갤러리 이미지를 자르기 화면으로 넘길 때 쓰는 임시 파일. */
     public static File captureFile(Context c) {
         return new File(c.getCacheDir(), "capture.png");
     }
 
     public static List<File> listTemplates(Context c) {
-        File[] files = templatesDir(c).listFiles((d, n) -> n.toLowerCase(Locale.ROOT).endsWith(".png"));
+        return listPng(templatesDir(c));
+    }
+
+    public static List<File> listImages(Context c) {
+        return listPng(imagesDir(c));
+    }
+
+    private static List<File> listPng(File dir) {
+        File[] files = dir.listFiles((d, n) -> n.toLowerCase(Locale.ROOT).endsWith(".png"));
         List<File> out = new ArrayList<>();
         if (files != null) {
             out.addAll(Arrays.asList(files));
         }
         Collections.sort(out, (a, b) -> a.getName().compareTo(b.getName()));
         return out;
+    }
+
+    /** 이미지 참조("btn:start", "opt:빙결", "img:상점") 가 가리키는 파일. 모르는 형식이면 null. */
+    public static File fileForRef(Context c, String ref) {
+        if (ref == null) {
+            return null;
+        }
+        int colon = ref.indexOf(':');
+        if (colon < 0) {
+            return null;
+        }
+        String kind = ref.substring(0, colon);
+        String name = ref.substring(colon + 1);
+        switch (kind) {
+            case "btn":
+                return buttonFile(c, name);
+            case "opt":
+                return templateFile(c, name);
+            case "img":
+                return imageFile(c, name);
+            default:
+                return null;
+        }
+    }
+
+    /** 등록된 회피 옵션 이미지들의 참조 ("opt:이름"). */
+    public static List<String> optionRefs(Context c) {
+        List<String> refs = new ArrayList<>();
+        for (File f : listTemplates(c)) {
+            refs.add("opt:" + nameOf(f));
+        }
+        return refs;
+    }
+
+    /**
+     * 순서 편집에서 고를 수 있는 모든 이미지 참조: 버튼 4개(등록 안 했어도) → 등록된 옵션 → 등록된 일반 이미지.
+     */
+    public static List<String> allRefs(Context c) {
+        List<String> refs = new ArrayList<>();
+        for (String key : BUTTON_KEYS) {
+            refs.add("btn:" + key);
+        }
+        refs.addAll(optionRefs(c));
+        for (File f : listImages(c)) {
+            refs.add("img:" + nameOf(f));
+        }
+        return refs;
     }
 
     public static String nameOf(File f) {

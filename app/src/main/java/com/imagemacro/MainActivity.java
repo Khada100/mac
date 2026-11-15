@@ -41,12 +41,14 @@ public class MainActivity extends Activity implements MacroController.Listener {
     private TextView textCapture;
     private TextView textStatus;
     private TextView textLog;
+    private TextView textSequence;
     private Button btnAccess;
     private Button btnNotify;
     private Button btnCapture;
     private Button btnMacro;
     private LinearLayout listButtons;
     private LinearLayout listOptions;
+    private LinearLayout listImages;
     private LinearLayout settingsBox;
 
     private EditText editOptionThreshold;
@@ -68,18 +70,22 @@ public class MainActivity extends Activity implements MacroController.Listener {
         textCapture = findViewById(R.id.textCapture);
         textStatus = findViewById(R.id.textStatus);
         textLog = findViewById(R.id.textLog);
+        textSequence = findViewById(R.id.textSequence);
         btnAccess = findViewById(R.id.btnAccess);
         btnNotify = findViewById(R.id.btnNotify);
         btnCapture = findViewById(R.id.btnCapture);
         btnMacro = findViewById(R.id.btnMacro);
         listButtons = findViewById(R.id.listButtons);
         listOptions = findViewById(R.id.listOptions);
+        listImages = findViewById(R.id.listImages);
         settingsBox = findViewById(R.id.settingsBox);
 
         btnAccess.setOnClickListener(v -> showAccessibilityGuide());
         btnNotify.setOnClickListener(v -> requestNotificationPermission());
         btnCapture.setOnClickListener(v -> toggleCapture());
         btnMacro.setOnClickListener(v -> toggleMacro());
+        findViewById(R.id.btnSequence).setOnClickListener(
+                v -> startActivity(new Intent(this, SequenceListActivity.class)));
         findViewById(R.id.btnImport).setOnClickListener(v -> pickImage());
         findViewById(R.id.btnSaveSettings).setOnClickListener(v -> saveSettings());
 
@@ -143,6 +149,9 @@ public class MainActivity extends Activity implements MacroController.Listener {
         btnMacro.setText(running ? "매크로 정지" : "매크로 시작");
         btnMacro.setEnabled(running || (capturing && access));
         textStatus.setText("매크로 상태: " + c.getStatus());
+
+        Sequence seq = SequenceStore.active(this);
+        textSequence.setText("지금 실행할 순서: " + seq.name + "\n" + seq.summary());
     }
 
     private void refreshImages() {
@@ -160,6 +169,18 @@ public class MainActivity extends Activity implements MacroController.Listener {
         }
         for (File f : options) {
             addImageRow(listOptions, ImageStore.nameOf(f), f);
+        }
+
+        listImages.removeAllViews();
+        List<File> images = ImageStore.listImages(this);
+        if (images.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText("아직 없음 — 📷 등록 화면에서 '순서용 이미지'로 저장하면 여기에 나타나요.");
+            empty.setPadding(0, dp(4), 0, dp(4));
+            listImages.addView(empty);
+        }
+        for (File f : images) {
+            addImageRow(listImages, ImageStore.nameOf(f), f);
         }
     }
 
